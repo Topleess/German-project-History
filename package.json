@@ -1,0 +1,12 @@
+{
+  "name": "history-platform",
+  "version": "1.0.0",
+  "description": "Интерактивная образовательная платформа по истории",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python app.py",
+    "install": "cd frontend && npm install"
+  },
+  "author": "",
+  "license": "ISC"
+} 
