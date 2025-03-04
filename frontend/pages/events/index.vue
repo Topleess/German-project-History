@@ -70,18 +70,6 @@
             </Button>
           </div>
         </div>
-        
-        <div class="flex justify-end mt-6">
-          <Button 
-            @click="openCreateEventModal" 
-            class="bg-green-600 hover:bg-green-700 text-white"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            Добавить событие
-          </Button>
-        </div>
       </div>
       
       <div v-if="loading" class="py-8 text-center">
@@ -143,6 +131,17 @@
         />
       </div>
     </Card>
+    
+    <!-- Плавающая кнопка добавления события -->
+    <button
+      @click="openCreateEventModal"
+      class="fixed bottom-8 right-8 w-14 h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors z-50"
+      title="Добавить событие"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+    </button>
     
     <!-- Модальное окно для создания события -->
     <Modal
