@@ -1,257 +1,328 @@
 <template>
-  <v-container fluid>
-    <v-card>
-      <v-card-title>
-        Библиотека исторических событий
-        <v-spacer></v-spacer>
-        <v-text-field
-          v-model="search"
-          append-icon="mdi-magnify"
-          label="Поиск"
-          single-line
-          hide-details
-          @input="applyFilter"
-        ></v-text-field>
-      </v-card-title>
+  <div class="p-4">
+    <Card>
+      <template #title>
+        <div class="flex flex-col md:flex-row md:items-center justify-between w-full">
+          <h1 class="text-2xl font-bold mb-4 md:mb-0">Библиотека исторических событий</h1>
+          <div class="w-full md:w-1/3">
+            <Input 
+              v-model="search" 
+              placeholder="Поиск" 
+              @input="applyFilter"
+            >
+              <template #append>
+                <button class="absolute inset-y-0 right-0 flex items-center pr-3" @click="applyFilter">
+                  <svg class="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </template>
+            </Input>
+          </div>
+        </div>
+      </template>
       
-      <v-card-text>
-        <v-row>
-          <v-col cols="12" sm="4" md="3">
-            <v-select
+      <div class="mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <!-- Фильтр по категории -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Категория</label>
+            <select 
               v-model="selectedCategory"
-              :items="categories"
-              item-text="name"
-              item-value="id"
-              label="Категория"
-              clearable
+              class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
               @change="applyFilter"
-            ></v-select>
-          </v-col>
-          
-          <v-col cols="12" sm="4" md="3">
-            <v-menu
-              ref="startDateMenu"
-              v-model="startDateMenu"
-              :close-on-content-click="false"
-              transition="scale-transition"
-              offset-y
-              min-width="auto"
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-text-field
-                  v-model="startDateFormatted"
-                  label="От"
-                  readonly
-                  v-bind="attrs"
-                  v-on="on"
-                  clearable
-                  @click:clear="startDate = null; applyFilter()"
-                ></v-text-field>
-              </template>
-              <v-date-picker
-                v-model="startDate"
-                @input="startDateMenu = false; applyFilter()"
-              ></v-date-picker>
-            </v-menu>
-          </v-col>
+              <option :value="null">Все категории</option>
+              <option v-for="category in categories" :key="category.id" :value="category.id">
+                {{ category.name }}
+              </option>
+            </select>
+          </div>
           
-          <v-col cols="12" sm="4" md="3">
-            <v-menu
-              ref="endDateMenu"
-              v-model="endDateMenu"
-              :close-on-content-click="false"
-              transition="scale-transition"
-              offset-y
-              min-width="auto"
+          <!-- Фильтр по дате начала -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">От</label>
+            <Input 
+              v-model="startDate" 
+              type="date"
+              @input="applyFilter"
+            />
+          </div>
+          
+          <!-- Фильтр по дате окончания -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">До</label>
+            <Input 
+              v-model="endDate" 
+              type="date"
+              @input="applyFilter"
+            />
+          </div>
+          
+          <!-- Кнопка сброса фильтров -->
+          <div class="flex items-end">
+            <Button 
+              variant="outline" 
+              class="w-full"
+              @click="clearFilters"
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-text-field
-                  v-model="endDateFormatted"
-                  label="До"
-                  readonly
-                  v-bind="attrs"
-                  v-on="on"
-                  clearable
-                  @click:clear="endDate = null; applyFilter()"
-                ></v-text-field>
-              </template>
-              <v-date-picker
-                v-model="endDate"
-                @input="endDateMenu = false; applyFilter()"
-              ></v-date-picker>
-            </v-menu>
-          </v-col>
-          
-          <v-col cols="12" sm="12" md="3" class="d-flex align-center">
-            <v-btn color="primary" @click="resetFilters">
               Сбросить фильтры
-            </v-btn>
-          </v-col>
-        </v-row>
-      </v-card-text>
+            </Button>
+          </div>
+        </div>
+      </div>
       
-      <v-data-table
-        :headers="headers"
-        :items="filteredEvents"
-        :loading="loading"
-        :items-per-page="10"
-        :footer-props="{
-          'items-per-page-options': [10, 25, 50, 100]
-        }"
-        class="elevation-1"
-      >
-        <template v-slot:item.category_id="{ item }">
-          <v-chip
-            :color="getCategoryColor(item.category_id)"
-            text-color="white"
-            small
-          >
-            {{ getCategoryName(item.category_id) }}
-          </v-chip>
-        </template>
-        
-        <template v-slot:item.date="{ item }">
-          {{ formatDate(item.date) }}
-        </template>
-        
-        <template v-slot:item.actions="{ item }">
-          <v-btn
-            icon
-            small
-            :to="`/events/${item.id}`"
-          >
-            <v-icon small>mdi-eye</v-icon>
-          </v-btn>
-        </template>
-      </v-data-table>
-    </v-card>
-  </v-container>
+      <!-- Список событий -->
+      <div v-if="loading" class="flex justify-center py-8">
+        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+      </div>
+      
+      <div v-else-if="filteredEvents.length === 0" class="text-center py-8 text-gray-500">
+        Нет событий, соответствующих заданным критериям
+      </div>
+      
+      <div v-else>
+        <!-- Отображение событий по годам -->
+        <div v-for="(yearEvents, year) in eventsByYear" :key="year" class="mb-10">
+          <div class="relative mb-6">
+            <h2 class="text-2xl font-bold text-gray-800 inline-block bg-white pr-4 relative z-10">{{ year }}</h2>
+            <div class="absolute left-0 right-0 top-1/2 h-px bg-gray-300"></div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card 
+              v-for="event in yearEvents" 
+              :key="event.id"
+              :title="event.title"
+              hoverable
+              @click="navigateTo(`/events/${event.id}`)"
+            >
+              <div class="flex items-center mb-2">
+                <span :class="[getCategoryColor(event.category_id), 'px-2 py-1 text-xs text-white rounded-full']">
+                  {{ getCategoryName(event.category_id) }}
+                </span>
+                <span class="ml-2 text-sm text-gray-500">
+                  {{ formatDate(event.date) }}
+                  <span v-if="event.end_date"> - {{ formatDate(event.end_date) }}</span>
+                </span>
+              </div>
+              
+              <p class="text-sm text-gray-700 line-clamp-3">{{ event.description }}</p>
+              
+              <div v-if="event.location" class="mt-2 text-xs text-gray-500 flex items-center">
+                <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {{ event.location }}
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </Card>
+  </div>
 </template>
 
-<script>
-export default {
-  name: 'EventsPage',
-  
-  data() {
-    return {
-      events: [],
-      filteredEvents: [],
-      categories: [],
-      loading: true,
-      search: '',
-      selectedCategory: null,
-      startDate: null,
-      endDate: null,
-      startDateMenu: false,
-      endDateMenu: false,
-      
-      headers: [
-        { text: 'Название', value: 'title', sortable: true },
-        { text: 'Дата', value: 'date', sortable: true },
-        { text: 'Категория', value: 'category_id', sortable: true },
-        { text: 'Важность', value: 'importance', sortable: true },
-        { text: 'Действия', value: 'actions', sortable: false }
-      ]
-    }
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useApi } from '~/composables/useApi'
+
+definePageMeta({
+  title: 'Библиотека исторических событий'
+})
+
+const api = useApi()
+const search = ref('')
+const selectedCategory = ref(null)
+const startDate = ref(null)
+const endDate = ref(null)
+const startDateMenu = ref(false)
+const endDateMenu = ref(false)
+const loading = ref(false)
+const events = ref([])
+const filteredEvents = ref([])
+const categories = ref([])
+
+// Категории событий
+const categoriesData = [
+  { id: 1, name: 'Политические', color: 'bg-blue-500' },
+  { id: 2, name: 'Военные', color: 'bg-red-500' },
+  { id: 3, name: 'Экономические', color: 'bg-green-500' },
+  { id: 4, name: 'Культурные', color: 'bg-purple-500' },
+  { id: 5, name: 'Социальные', color: 'bg-yellow-500' }
+]
+
+// Расширенные тестовые данные для событий из разных лет
+const testEvents = [
+  {
+    id: 1,
+    title: 'Первая мировая война',
+    date: '1914-07-28',
+    end_date: '1918-11-11',
+    category_id: 2,
+    description: 'Один из самых широкомасштабных вооружённых конфликтов в истории человечества',
+    location: 'Европа, Ближний Восток, Африка'
   },
-  
-  computed: {
-    startDateFormatted() {
-      return this.startDate ? this.formatDate(this.startDate) : ''
-    },
-    
-    endDateFormatted() {
-      return this.endDate ? this.formatDate(this.endDate) : ''
-    }
+  {
+    id: 2,
+    title: 'Революция 1917 года',
+    date: '1917-02-23',
+    end_date: '1917-11-07',
+    category_id: 1,
+    description: 'Революционные события в России, приведшие к свержению монархии и установлению советской власти',
+    location: 'Российская империя'
   },
-  
-  head() {
-    return {
-      title: 'Библиотека событий - История'
-    }
+  {
+    id: 3,
+    title: 'Версальский договор',
+    date: '1919-06-28',
+    category_id: 1,
+    description: 'Мирный договор, завершивший Первую мировую войну',
+    location: 'Версаль, Франция'
   },
-  
-  async mounted() {
-    await this.fetchData()
+  {
+    id: 4,
+    title: 'Теория относительности Эйнштейна',
+    date: '1915-11-25',
+    category_id: 4,
+    description: 'Публикация общей теории относительности Альбертом Эйнштейном',
+    location: 'Германия'
   },
+  {
+    id: 5,
+    title: 'Великая депрессия',
+    date: '1929-10-29',
+    end_date: '1939-09-01',
+    category_id: 5,
+    description: 'Мировой экономический кризис, начавшийся после краха на Нью-Йоркской фондовой бирже',
+    location: 'США, Европа'
+  },
+  {
+    id: 6,
+    title: 'Вторая мировая война',
+    date: '1939-09-01',
+    end_date: '1945-09-02',
+    category_id: 2,
+    description: 'Крупнейший вооружённый конфликт в истории человечества',
+    location: 'Европа, Азия, Африка'
+  },
+  {
+    id: 7,
+    title: 'Холодная война',
+    date: '1947-03-12',
+    end_date: '1991-12-26',
+    category_id: 1,
+    description: 'Геополитическое противостояние между СССР и США и их союзниками',
+    location: 'Весь мир'
+  }
+]
+
+// Группировка событий по годам
+const eventsByYear = computed(() => {
+  const grouped = {}
   
-  methods: {
-    async fetchData() {
-      this.loading = true
-      try {
-        // Получаем данные о категориях
-        const categoriesResponse = await this.$axios.get('/api/categories/')
-        this.categories = categoriesResponse.data
-        
-        // Получаем данные о событиях
-        const eventsResponse = await this.$axios.get('/api/events/')
-        this.events = eventsResponse.data
-        this.filteredEvents = [...this.events]
-      } catch (error) {
-        console.error('Ошибка при загрузке данных:', error)
-      } finally {
-        this.loading = false
-      }
-    },
-    
-    applyFilter() {
-      this.filteredEvents = this.events.filter(event => {
-        // Фильтрация по поиску
-        if (this.search && 
-            !event.title.toLowerCase().includes(this.search.toLowerCase()) && 
-            !event.description.toLowerCase().includes(this.search.toLowerCase())) {
-          return false
-        }
-        
-        // Фильтрация по категории
-        if (this.selectedCategory && event.category_id !== this.selectedCategory) {
-          return false
-        }
-        
-        // Фильтрация по дате начала
-        if (this.startDate) {
-          const eventDate = new Date(event.date)
-          const filterDate = new Date(this.startDate)
-          if (eventDate < filterDate) {
-            return false
-          }
-        }
-        
-        // Фильтрация по дате окончания
-        if (this.endDate) {
-          const eventDate = new Date(event.date)
-          const filterDate = new Date(this.endDate)
-          if (eventDate > filterDate) {
-            return false
-          }
-        }
-        
-        return true
-      })
-    },
-    
-    resetFilters() {
-      this.search = ''
-      this.selectedCategory = null
-      this.startDate = null
-      this.endDate = null
-      this.filteredEvents = [...this.events]
-    },
-    
-    getCategoryName(categoryId) {
-      const category = this.categories.find(c => c.id === categoryId)
-      return category ? category.name : 'Неизвестно'
-    },
-    
-    getCategoryColor(categoryId) {
-      const category = this.categories.find(c => c.id === categoryId)
-      return category ? category.color : '#3498db'
-    },
-    
-    formatDate(dateString) {
-      const date = new Date(dateString)
-      return date.toLocaleDateString('ru-RU')
+  // Сортируем события по дате
+  const sortedEvents = [...filteredEvents.value].sort((a, b) => {
+    return new Date(a.date) - new Date(b.date)
+  })
+  
+  // Группируем по годам
+  sortedEvents.forEach(event => {
+    const year = new Date(event.date).getFullYear()
+    if (!grouped[year]) {
+      grouped[year] = []
     }
+    grouped[year].push(event)
+  })
+  
+  // Сортируем ключи (годы) в обратном порядке, чтобы показать сначала новые
+  return Object.keys(grouped)
+    .sort((a, b) => b - a)
+    .reduce((obj, key) => {
+      obj[key] = grouped[key]
+      return obj
+    }, {})
+})
+
+// Форматирование даты
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat('ru-RU').format(date)
+}
+
+// Получение названия категории по ID
+const getCategoryName = (categoryId) => {
+  const category = categories.value.find(c => c.id === categoryId)
+  return category ? category.name : ''
+}
+
+// Получение цвета категории по ID
+const getCategoryColor = (categoryId) => {
+  const category = categories.value.find(c => c.id === categoryId)
+  return category ? category.color : 'bg-gray-500'
+}
+
+// Применение фильтров
+const applyFilter = () => {
+  filteredEvents.value = events.value.filter(event => {
+    // Фильтр по поиску
+    const searchMatch = !search.value || 
+      event.title.toLowerCase().includes(search.value.toLowerCase()) ||
+      event.description.toLowerCase().includes(search.value.toLowerCase())
+    
+    // Фильтр по категории
+    const categoryMatch = !selectedCategory.value || event.category_id === selectedCategory.value
+    
+    // Фильтр по дате начала
+    const startDateMatch = !startDate.value || new Date(event.date) >= new Date(startDate.value)
+    
+    // Фильтр по дате окончания
+    const endDateMatch = !endDate.value || new Date(event.date) <= new Date(endDate.value)
+    
+    return searchMatch && categoryMatch && startDateMatch && endDateMatch
+  })
+}
+
+// Загрузка данных
+const fetchEvents = async () => {
+  loading.value = true
+  try {
+    // Загружаем данные с API
+    const { get } = useApi()
+    const eventsData = await get('/api/events')
+    const categoriesData = await get('/api/categories')
+    
+    events.value = eventsData
+    filteredEvents.value = eventsData
+    categories.value = categoriesData
+  } catch (error) {
+    console.error('Ошибка при загрузке событий:', error)
+  } finally {
+    loading.value = false
   }
 }
-</script> 
+
+// Очистка всех фильтров
+const clearFilters = () => {
+  search.value = ''
+  selectedCategory.value = null
+  startDate.value = null
+  endDate.value = null
+  applyFilter()
+}
+
+onMounted(() => {
+  fetchEvents()
+})
+</script>
+
+<style>
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style> 

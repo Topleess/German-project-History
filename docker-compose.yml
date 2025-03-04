@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: history-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=sqlite:///./history.db
+    restart: unless-stopped
+
+  # Раскомментировал и обновил конфигурацию фронтенда
+  frontend:
+    build: ./frontend
+    container_name: history-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+    environment:
+      - NUXT_PUBLIC_API_BASE=http://localhost:8000
+    restart: unless-stopped 
