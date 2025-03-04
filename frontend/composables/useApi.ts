@@ -17,6 +17,11 @@ export const useApi = () => {
       })
       
       if (!response.ok) {
+        // Если ошибка 422, пытаемся получить детальное описание ошибки
+        if (response.status === 422) {
+          const errorData = await response.json();
+          throw new Error(`Ошибка валидации: ${JSON.stringify(errorData.detail)}`);
+        }
         throw new Error(`Ошибка HTTP: ${response.status}`)
       }
       
@@ -41,6 +46,12 @@ export const useApi = () => {
       })
       
       if (!response.ok) {
+        // Если ошибка 422, пытаемся получить детальное описание ошибки
+        if (response.status === 422) {
+          const errorData = await response.json();
+          console.log('Детали ошибки валидации:', errorData);
+          throw new Error(`Ошибка валидации: ${JSON.stringify(errorData.detail)}`);
+        }
         throw new Error(`Ошибка HTTP: ${response.status}`)
       }
       
@@ -65,6 +76,11 @@ export const useApi = () => {
       })
       
       if (!response.ok) {
+        // Если ошибка 422, пытаемся получить детальное описание ошибки
+        if (response.status === 422) {
+          const errorData = await response.json();
+          throw new Error(`Ошибка валидации: ${JSON.stringify(errorData.detail)}`);
+        }
         throw new Error(`Ошибка HTTP: ${response.status}`)
       }
       

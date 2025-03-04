@@ -97,36 +97,72 @@
               hoverable
               @click="navigateTo(`/events/${event.id}`)"
             >
-              <div class="flex items-center mb-2">
-                <span :class="[getCategoryColor(event.category_id), 'px-2 py-1 text-xs text-white rounded-full']">
-                  {{ getCategoryName(event.category_id) }}
-                </span>
-                <span class="ml-2 text-sm text-gray-500">
-                  {{ formatDate(event.date) }}
-                  <span v-if="event.end_date"> - {{ formatDate(event.end_date) }}</span>
-                </span>
-              </div>
-              
-              <p class="text-sm text-gray-700 line-clamp-3">{{ event.description }}</p>
-              
-              <div v-if="event.location" class="mt-2 text-xs text-gray-500 flex items-center">
-                <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                {{ event.location }}
+              <div class="relative">
+                <div class="flex items-center mb-2">
+                  <span :class="[getCategoryColor(event.category_id), 'px-2 py-1 text-xs text-white rounded-full']">
+                    {{ getCategoryName(event.category_id) }}
+                  </span>
+                  <span class="ml-2 text-sm text-gray-500">
+                    {{ formatDate(event.date) }}
+                    <span v-if="event.end_date"> - {{ formatDate(event.end_date) }}</span>
+                  </span>
+                </div>
+                
+                <p class="text-sm text-gray-700 line-clamp-3">{{ event.description }}</p>
+                
+                <div v-if="event.location" class="mt-2 text-xs text-gray-500 flex items-center">
+                  <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  {{ event.location }}
+                </div>
+                
+                <!-- Кнопка редактирования -->
+                <button 
+                  @click.stop="editEvent(event)"
+                  class="absolute top-0 right-0 p-1 bg-white rounded-full shadow hover:bg-gray-100"
+                  title="Редактировать событие"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
               </div>
             </Card>
           </div>
         </div>
       </div>
     </Card>
+
+    <!-- Кнопка добавления нового события -->
+    <div class="fixed bottom-6 right-6">
+      <button 
+        @click="openEventForm()" 
+        class="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg flex items-center justify-center focus:outline-none"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Модальное окно для формы события -->
+    <Modal v-if="isEventFormOpen" @close="closeEventForm">
+      <EventForm 
+        :event="selectedEvent" 
+        @close="closeEventForm" 
+        @success="handleEventSuccess"
+      />
+    </Modal>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useApi } from '~/composables/useApi'
+import Modal from '~/components/Modal.vue'
+import EventForm from '~/components/EventForm.vue'
 
 definePageMeta({
   title: 'Библиотека исторических событий'
@@ -143,6 +179,8 @@ const loading = ref(false)
 const events = ref([])
 const filteredEvents = ref([])
 const categories = ref([])
+const isEventFormOpen = ref(false)
+const selectedEvent = ref(null)
 
 // Категории событий
 const categoriesData = [
@@ -311,6 +349,29 @@ const clearFilters = () => {
   startDate.value = null
   endDate.value = null
   applyFilter()
+}
+
+// Открытие формы для создания нового события
+const openEventForm = (event = null) => {
+  selectedEvent.value = event
+  isEventFormOpen.value = true
+}
+
+// Закрытие формы события
+const closeEventForm = () => {
+  isEventFormOpen.value = false
+  selectedEvent.value = null
+}
+
+// Обработка успешного создания/редактирования события
+const handleEventSuccess = () => {
+  closeEventForm()
+  fetchEvents()
+}
+
+// Функция для редактирования события
+const editEvent = (event) => {
+  openEventForm(event)
 }
 
 onMounted(() => {
