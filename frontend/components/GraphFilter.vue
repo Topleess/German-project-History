@@ -103,7 +103,11 @@ const endYear = ref(props.maxYear)
 function toggleCategory(categoryId) {
   const index = selectedCategories.value.indexOf(categoryId)
   if (index === -1) {
-    selectedCategories.value.push(categoryId)
+    if (selectedCategories.value.length === 0) {
+      selectedCategories.value = [categoryId]
+    } else {
+      selectedCategories.value.push(categoryId)
+    }
   } else {
     selectedCategories.value.splice(index, 1)
   }
@@ -111,7 +115,7 @@ function toggleCategory(categoryId) {
 }
 
 function isCategorySelected(categoryId) {
-  return selectedCategories.value.includes(categoryId) || selectedCategories.value.length === 0
+  return selectedCategories.value.includes(categoryId)
 }
 
 function getContrastTextColor(hexColor) {

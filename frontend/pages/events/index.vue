@@ -93,36 +93,37 @@
         <p class="text-gray-600">Нет событий, соответствующих заданным критериям.</p>
       </div>
       
-      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div v-else class="grid grid-cols-1 gap-8">
         <!-- Отображение событий по годам -->
         <div v-for="(yearEvents, year) in eventsByYear" :key="year" class="mb-10">
-          <div class="relative mb-6">
-            <h2 class="text-2xl font-bold text-gray-800 inline-block bg-white pr-4 relative z-10">{{ year }}</h2>
+          <div class="relative mb-8">
+            <h2 class="text-3xl font-bold text-gray-800 inline-block bg-white pr-4 relative z-10">{{ year }}</h2>
             <div class="absolute left-0 right-0 top-1/2 h-px bg-gray-300"></div>
           </div>
           
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div class="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-6">
             <Card 
               v-for="event in yearEvents" 
               :key="event.id"
               :title="event.title"
               hoverable
               @click="navigateTo(`/events/${event.id}`)"
+              class="w-full"
             >
-              <div class="flex items-center mb-2">
-                <span :class="[getCategoryColor(event.category_id), 'px-2 py-1 text-xs text-white rounded-full']">
+              <div class="flex items-center mb-3">
+                <span :class="[getCategoryColor(event.category_id), 'px-3 py-1.5 text-xs font-medium text-white rounded-full']">
                   {{ getCategoryName(event.category_id) }}
                 </span>
-                <span class="ml-2 text-sm text-gray-500">
+                <span class="ml-3 text-sm text-gray-600">
                   {{ formatDate(event.date) }}
                   <span v-if="event.end_date"> - {{ formatDate(event.end_date) }}</span>
                 </span>
               </div>
               
-              <p class="text-sm text-gray-700 line-clamp-3">{{ event.description }}</p>
+              <p class="text-base text-gray-700 line-clamp-4 mb-3">{{ event.description }}</p>
               
-              <div v-if="event.location" class="mt-2 text-xs text-gray-500 flex items-center">
-                <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div v-if="event.location" class="mt-3 text-sm text-gray-600 flex items-center">
+                <svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>

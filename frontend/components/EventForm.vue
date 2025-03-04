@@ -247,66 +247,165 @@ const errors = reactive({})
 
 // Инициализация соединений из существующих данных
 function initializeConnections() {
+  // Очищаем текущие соединения
+  connections.value = [];
+  
   if (props.isEditing && props.existingConnections && props.existingConnections.length > 0) {
-    // Очищаем текущие соединения
-    connections.value = [];
-    
     // Добавляем существующие соединения
     props.existingConnections.forEach(conn => {
-      const connection = {
-        id: conn.id, // Сохраняем ID существующей связи
-        strength: conn.strength || 2,
-        description: conn.description || '',
-        event_id: null
-      };
+      let connection = null;
       
       // Определяем тип связи и id связанного события
-      if (conn.cause_id === props.initialData.id) {
-        connection.type = 'cause';
-        connection.event_id = conn.effect_id;
-      } else {
-        connection.type = 'effect';
-        connection.event_id = conn.cause_id;
+      if (conn.cause_id !== undefined && conn.effect_id !== undefined) {
+        // Формат cause_id/effect_id
+        if (conn.cause_id === props.initialData.id) {
+          connection = {
+            id: conn.id || null,
+            type: 'cause',
+            event_id: conn.effect_id,
+            strength: conn.strength || conn.value || 2,
+            description: conn.description || ''
+          };
+        } else if (conn.effect_id === props.initialData.id) {
+          connection = {
+            id: conn.id || null,
+            type: 'effect',
+            event_id: conn.cause_id,
+            strength: conn.strength || conn.value || 2,
+            description: conn.description || ''
+          };
+        }
+      } else if (conn.source !== undefined && conn.target !== undefined) {
+        // Формат source/target
+        if (conn.source === props.initialData.id) {
+          connection = {
+            id: conn.id || null,
+            type: 'cause',
+            event_id: conn.target,
+            strength: conn.strength || conn.value || 2,
+            description: conn.description || ''
+          };
+        } else if (conn.target === props.initialData.id) {
+          connection = {
+            id: conn.id || null,
+            type: 'effect',
+            event_id: conn.source,
+            strength: conn.strength || conn.value || 2,
+            description: conn.description || ''
+          };
+        }
       }
       
-      connections.value.push(connection);
+      // Добавляем только те соединения, где event_id определен
+      if (connection && connection.event_id) {
+        connections.value.push(connection);
+      }
     });
-  } else if (connections.value.length === 0) {
-    // Если нет существующих соединений и массив пуст, добавляем пустую форму соединения
+  }
+  
+  // Если нет существующих соединений или массив пуст, добавляем пустую форму соединения
+  if (connections.value.length === 0) {
     addConnection();
   }
 }
 
 // Доступные события для создания связей
 const availableEvents = computed(() => {
-  // Если режим создания нового события (не редактирование), показываем все события
-  if (!props.isEditing) {
-    return props.events.filter(event => true)
+  // Если нет данных о событиях, возвращаем пустой массив
+  if (!props.events || props.events.length === 0) {
+    return []
   }
   
-  // Если режим редактирования и это скриншот со связями, фильтруем список
-  if (props.isEditing && props.initialData && props.initialData.id) {
-    // Исключаем текущее событие
-    const filteredEvents = props.events.filter(event => event.id !== props.initialData.id)
-    
-    // Фильтруем уже использованные события в соединениях
-    const usedEventIds = new Set(connections.value
-      .filter(conn => conn.event_id)
-      .map(conn => conn.event_id))
-    
-    // Возвращаем только события, которые еще не использованы в соединениях
-    return filteredEvents.filter(event => !usedEventIds.has(event.id) || 
-      // Или те, которые используются в текущем отображаемом соединении
-      connections.value.some(conn => conn.event_id === event.id))
-  }
-  
-  // Если не попадает ни в одно из условий выше, просто исключаем текущее событие
-  return props.events.filter(event => {
+  // Исключаем текущее событие из списка доступных событий
+  const filteredEvents = props.events.filter(event => {
     if (props.initialData && props.initialData.id) {
       return event.id !== props.initialData.id
     }
     return true
   })
+  
+  // Если режим создания нового события (не редактирование), показываем все события
+  if (!props.isEditing) {
+    return filteredEvents
+  }
+  
+  // Если режим редактирования и есть ID текущего события
+  if (props.isEditing && props.initialData && props.initialData.id) {
+    // Проверяем, есть ли в connections пустые соединения (где не выбрано связанное событие)
+    const hasEmptyConnections = connections.value.some(conn => !conn.event_id)
+    
+    // Если есть пустые соединения, возвращаем все события для возможности создания новых связей
+    if (hasEmptyConnections) {
+      return filteredEvents
+    }
+    
+    // Если нет пустых соединений, то работаем только с существующими связями
+    // (эта логика сохраняется от предыдущего решения)
+    const eventId = props.initialData.id
+    
+    // Используем Set для избежания дубликатов
+    const addedEventIds = new Set()
+    const relatedEvents = []
+    
+    // 1. Добавляем события, которые уже выбраны в текущих соединениях формы
+    connections.value.forEach(conn => {
+      if (conn.event_id) {
+        const relatedEvent = filteredEvents.find(event => event.id === conn.event_id)
+        if (relatedEvent && !addedEventIds.has(relatedEvent.id)) {
+          addedEventIds.add(relatedEvent.id)
+          relatedEvents.push(relatedEvent)
+        }
+      }
+    })
+    
+    // 2. Добавляем события из existingConnections
+    if (props.existingConnections && props.existingConnections.length > 0) {
+      props.existingConnections.forEach(conn => {
+        let relatedEventId = null
+        
+        // Проверяем формат cause_id/effect_id
+        if (conn.cause_id === eventId && conn.effect_id) {
+          relatedEventId = conn.effect_id
+        } 
+        else if (conn.effect_id === eventId && conn.cause_id) {
+          relatedEventId = conn.cause_id
+        }
+        // Проверяем формат source/target
+        else if (conn.source === eventId && conn.target) {
+          relatedEventId = conn.target
+        }
+        else if (conn.target === eventId && conn.source) {
+          relatedEventId = conn.source
+        }
+        
+        if (relatedEventId && !addedEventIds.has(relatedEventId)) {
+          const relatedEvent = filteredEvents.find(event => event.id === relatedEventId)
+          if (relatedEvent) {
+            addedEventIds.add(relatedEventId)
+            relatedEvents.push(relatedEvent)
+          }
+        }
+      })
+    }
+    
+    // 3. Добавляем события из related_events
+    if (props.initialData.related_events && props.initialData.related_events.length > 0) {
+      props.initialData.related_events.forEach(relatedId => {
+        if (!addedEventIds.has(relatedId)) {
+          const relatedEvent = filteredEvents.find(event => event.id === relatedId)
+          if (relatedEvent) {
+            addedEventIds.add(relatedId)
+            relatedEvents.push(relatedEvent)
+          }
+        }
+      })
+    }
+    
+    return relatedEvents
+  }
+  
+  // Если не попадает ни в одно из условий выше
+  return filteredEvents
 })
 
 // Форматирование года

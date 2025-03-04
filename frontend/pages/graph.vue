@@ -24,10 +24,14 @@
               class="px-3 py-1 text-sm rounded-full transition-colors"
               :class="[
                 isCategorySelected(category.id) 
-                  ? 'text-white' 
-                  : 'text-gray-700 bg-gray-100 hover:bg-gray-200',
-                isCategorySelected(category.id) ? category.color : ''
+                  ? 'ring-2 ring-offset-1' 
+                  : 'opacity-80',
               ]"
+              :style="{
+                backgroundColor: category.color,
+                color: getContrastTextColor(category.color),
+                ringColor: category.color
+              }"
               @click="toggleCategory(category.id)"
             >
               {{ category.name }}
@@ -65,17 +69,6 @@
         >
           Сбросить фильтры
         </Button>
-        
-        <!-- Кнопка добавления нового события -->
-        <Button 
-          @click="openCreateEventModal"
-          class="bg-green-600 hover:bg-green-700 text-white"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Добавить событие
-        </Button>
       </div>
     </div>
     
@@ -98,7 +91,7 @@
         </div>
       </template>
       
-      <div ref="graphContainer" class="w-full h-[600px] border border-gray-200 rounded-md overflow-hidden relative">
+      <div ref="graphContainer" class="w-full h-[600px] border border-gray-200 rounded-md overflow-hidden relative cursor-grab active:cursor-grabbing">
         <!-- Индикатор загрузки -->
         <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-white bg-opacity-80 z-10">
           <div class="text-center">
@@ -131,6 +124,17 @@
           </div>
         </div>
         <svg width="100%" height="600"></svg>
+        
+        <!-- Круглая кнопка добавления нового события -->
+        <button
+          @click="openCreateEventModal"
+          class="absolute bottom-4 right-4 w-14 h-14 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow-lg flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors z-10"
+          title="Добавить событие"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
     </Card>
     
@@ -289,8 +293,9 @@ const filteredEvents = computed(() => {
       return false
     }
     
-    // Проверка по категориям
-    if (filters.value.categories && !filters.value.categories.includes(event.category_id)) {
+    // Проверка по категориям - если есть выбранные категории, показываем только события этих категорий
+    if (filters.value.categories && filters.value.categories.length > 0 && 
+        !filters.value.categories.includes(event.category_id)) {
       return false
     }
     
@@ -644,25 +649,53 @@ function updateFilters(newFilters) {
   filters.value = { ...filters.value, ...newFilters }
 }
 
-// Проверка выбрана ли категория
+// Функция для определения, выбрана ли категория
 function isCategorySelected(categoryId) {
   return filters.value.categories && filters.value.categories.includes(categoryId)
 }
 
-// Переключение категории
+// Функция переключения категории
 function toggleCategory(categoryId) {
+  // Инициализируем массив категорий, если он еще не создан
   if (!filters.value.categories) {
-    filters.value.categories = [categoryId]
-  } else if (filters.value.categories.includes(categoryId)) {
-    filters.value.categories = filters.value.categories.filter(id => id !== categoryId)
-    if (filters.value.categories.length === 0) {
-      filters.value.categories = null
-    }
-  } else {
-    filters.value.categories.push(categoryId)
+    filters.value.categories = []
   }
   
-  updateFilters({ categories: filters.value.categories })
+  const index = filters.value.categories.indexOf(categoryId)
+  if (index === -1) {
+    // Если это первая выбранная категория, очищаем массив и добавляем только эту категорию
+    if (filters.value.categories.length === 0) {
+      filters.value.categories = [categoryId]
+    } else {
+      // Иначе добавляем к существующим
+      filters.value.categories.push(categoryId)
+    }
+  } else {
+    // Если категория уже выбрана, убираем ее
+    filters.value.categories.splice(index, 1)
+  }
+  
+  updateFilters(filters.value)
+}
+
+// Функция для определения контрастного цвета текста
+function getContrastTextColor(hexColor) {
+  // Если цвет не задан, возвращаем черный
+  if (!hexColor) return '#000000'
+  
+  // Удаляем # из начала строки, если есть
+  const hex = hexColor.replace('#', '')
+  
+  // Преобразуем hex в RGB
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  
+  // Вычисляем яркость
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000
+  
+  // Возвращаем черный или белый в зависимости от яркости
+  return brightness > 128 ? '#000000' : '#FFFFFF'
 }
 
 // Открытие модального окна для создания события
