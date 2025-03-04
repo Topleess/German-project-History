@@ -57,13 +57,24 @@
         </div>
       </div>
       
-      <!-- Кнопка сброса фильтров -->
-      <div class="mt-4">
+      <div class="flex justify-between mt-4">
+        <!-- Кнопка сброса фильтров -->
         <Button 
           variant="outline" 
           @click="resetFilters"
         >
           Сбросить фильтры
+        </Button>
+        
+        <!-- Кнопка добавления нового события -->
+        <Button 
+          @click="openCreateEventModal"
+          class="bg-green-600 hover:bg-green-700 text-white"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Добавить событие
         </Button>
       </div>
     </div>
@@ -128,10 +139,27 @@
       :all-events="events"
       :categories="categories"
       :is-open="isPopoverOpen"
+      :connections="connections"
       @close="closePopover"
       @select-event="selectEventById"
       @view-details="viewEventDetails"
     />
+    
+    <!-- Модальное окно для создания события -->
+    <Modal
+      :show="showCreateEventModal"
+      title="Создание нового события"
+      confirm-text="Создать"
+      @close="closeCreateEventModal"
+      @confirm="createEvent"
+    >
+      <EventForm
+        ref="eventForm"
+        :categories="categories"
+        :events="events"
+        :show-connections-section="true"
+      />
+    </Modal>
   </div>
 </template>
 
@@ -141,6 +169,8 @@ import { useNuxtApp } from '#app'
 import { useRouter } from 'vue-router'
 import EventPopover from '../components/EventPopover.vue'
 import { useApi } from '../composables/useApi'
+import Modal from '../components/Modal.vue'
+import EventForm from '../components/EventForm.vue'
 
 definePageMeta({
   title: 'Интерактивный граф - История'
@@ -161,7 +191,7 @@ const isPopoverOpen = ref(false)
 const router = useRouter()
 
 // Получаем API клиент
-const { get } = useApi()
+const { get, post } = useApi()
 
 // Состояние загрузки
 const loading = ref(true)
@@ -171,6 +201,10 @@ const error = ref(null)
 const categories = ref([])
 const events = ref([])
 const connections = ref([])
+
+// Состояние для создания нового события
+const showCreateEventModal = ref(false)
+const eventForm = ref(null)
 
 // Загрузка данных с сервера
 async function fetchData() {
@@ -363,6 +397,8 @@ function updateGraph() {
     .style('stroke', '#999')
     .style('stroke-opacity', 0.6)
     .style('stroke-width', d => Math.sqrt(d.value))
+    .attr('data-source', d => d.source.id || d.source)
+    .attr('data-target', d => d.target.id || d.target)
   
   // Добавляем узлы
   const node = graphG.append('g')
@@ -409,6 +445,8 @@ function updateGraph() {
         .attr('y1', d => d.source.y)
         .attr('x2', d => d.target.x)
         .attr('y2', d => d.target.y)
+        .attr('data-source', d => d.source.id || d.source)
+        .attr('data-target', d => d.target.id || d.target)
   
       node
         .attr('transform', d => `translate(${d.x},${d.y})`)
@@ -625,6 +663,68 @@ function toggleCategory(categoryId) {
   }
   
   updateFilters({ categories: filters.value.categories })
+}
+
+// Открытие модального окна для создания события
+function openCreateEventModal() {
+  showCreateEventModal.value = true
+}
+
+// Закрытие модального окна для создания события
+function closeCreateEventModal() {
+  showCreateEventModal.value = false
+}
+
+// Создание нового события
+async function createEvent() {
+  if (!eventForm.value.validateForm()) {
+    return
+  }
+  
+  try {
+    loading.value = true
+    
+    // Получаем данные из формы
+    const eventData = { ...eventForm.value.formData }
+    
+    // Добавляем новое событие на сервер
+    const newEvent = await post('/api/events', eventData)
+    
+    // Обрабатываем созданные связи
+    const connections = eventForm.value.connections
+    if (connections.length > 0) {
+      const connectionPromises = connections
+        .filter(conn => conn.event_id) // Фильтруем только заполненные связи
+        .map(conn => {
+          const connectionData = {
+            description: conn.description,
+            strength: conn.strength
+          }
+          
+          if (conn.type === 'cause') {
+            connectionData.cause_id = newEvent.id
+            connectionData.effect_id = conn.event_id
+          } else {
+            connectionData.cause_id = conn.event_id
+            connectionData.effect_id = newEvent.id
+          }
+          
+          return post('/api/connections', connectionData)
+        })
+      
+      await Promise.all(connectionPromises)
+    }
+    
+    // Обновляем данные
+    await fetchData()
+    
+    // Закрываем модальное окно
+    closeCreateEventModal()
+  } catch (error) {
+    console.error('Ошибка при создании события:', error)
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 

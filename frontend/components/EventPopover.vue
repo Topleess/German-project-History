@@ -69,6 +69,41 @@
             <p class="text-sm text-gray-700 leading-relaxed">{{ event.description }}</p>
           </div>
           
+          <!-- Секция связей текущего события -->
+          <div v-if="causalEvents.length > 0" class="mb-4 bg-blue-50 p-3 rounded-md">
+            <h3 class="text-sm font-semibold mb-2">Это событие является причиной для:</h3>
+            <ul class="list-disc pl-5 space-y-1">
+              <li v-for="causeEvent in causalEvents" :key="causeEvent.id" class="text-sm">
+                <span class="text-blue-700 cursor-pointer" @click="$emit('select-event', causeEvent.id)">
+                  {{ causeEvent.title }}
+                </span>
+                <span v-if="causeEvent.connection.strength" class="text-xs text-gray-500 ml-1">
+                  (Сила: {{ causeEvent.connection.strength }})
+                </span>
+                <p v-if="causeEvent.connection.description" class="text-xs text-gray-600 italic mt-0.5">
+                  "{{ causeEvent.connection.description }}"
+                </p>
+              </li>
+            </ul>
+          </div>
+          
+          <div v-if="effectEvents.length > 0" class="mb-4 bg-green-50 p-3 rounded-md">
+            <h3 class="text-sm font-semibold mb-2">Это событие является следствием для:</h3>
+            <ul class="list-disc pl-5 space-y-1">
+              <li v-for="effectEvent in effectEvents" :key="effectEvent.id" class="text-sm">
+                <span class="text-green-700 cursor-pointer" @click="$emit('select-event', effectEvent.id)">
+                  {{ effectEvent.title }}
+                </span>
+                <span v-if="effectEvent.connection.strength" class="text-xs text-gray-500 ml-1">
+                  (Сила: {{ effectEvent.connection.strength }})
+                </span>
+                <p v-if="effectEvent.connection.description" class="text-xs text-gray-600 italic mt-0.5">
+                  "{{ effectEvent.connection.description }}"
+                </p>
+              </li>
+            </ul>
+          </div>
+          
           <div v-if="event.image_url" class="mb-4 relative rounded overflow-hidden h-36">
             <img :src="event.image_url" :alt="event.title" class="w-full h-full object-cover">
           </div>
@@ -86,6 +121,21 @@
                   <h4 class="font-medium text-blue-600 text-sm">{{ relatedEvent.title }}</h4>
                   <span class="text-xs text-gray-500">{{ formatYear(relatedEvent.date) }}</span>
                 </div>
+                <div v-if="relatedEvent.connection" class="mt-1 flex items-center">
+                  <span 
+                    class="text-xs px-1.5 py-0.5 rounded-full"
+                    :class="getConnectionTypeClass(relatedEvent.connection.type)"
+                  >
+                    {{ getConnectionLabel(relatedEvent.connection.type, relatedEvent.id) }}
+                  </span>
+                  <span v-if="relatedEvent.connection.strength" class="ml-1 text-xs text-gray-500">
+                    (Сила: {{ relatedEvent.connection.strength }})
+                  </span>
+                </div>
+                <p v-if="relatedEvent.connection && relatedEvent.connection.description" 
+                   class="text-xs text-gray-600 mt-1 italic">
+                  "{{ relatedEvent.connection.description }}"
+                </p>
                 <p class="text-xs text-gray-600 mt-1 line-clamp-2">
                   {{ relatedEvent.description }}
                 </p>
@@ -126,21 +176,256 @@ const props = defineProps({
   categories: {
     type: Array,
     default: () => []
+  },
+  connections: {
+    type: Array,
+    default: () => []
   }
 })
 
 const emit = defineEmits(['close', 'select-event', 'view-details'])
 
 const relatedEvents = computed(() => {
-  if (!props.event || !props.event.related_events || !props.allEvents) return []
+  if (!props.event || !props.allEvents) return []
   
-  return props.allEvents.filter(e => 
-    props.event.related_events.includes(e.id) && e.id !== props.event.id
-  )
+  const result = []
+  const eventId = props.event.id
+  
+  // Получаем все связи для текущего события
+  const connections = []
+  props.allEvents.forEach(event => {
+    // Проверяем, есть ли у события массив connections
+    if (event.connections) {
+      event.connections.forEach(conn => {
+        if (conn.cause_id === eventId || conn.effect_id === eventId) {
+          connections.push(conn)
+        }
+      })
+    }
+  })
+  
+  // Ищем все связи между событиями в графе
+  const allGraphConnections = []
+  const graphLinks = document.querySelectorAll('.graph-container .links line')
+  graphLinks.forEach(link => {
+    const sourceId = parseInt(link.getAttribute('data-source') || '0')
+    const targetId = parseInt(link.getAttribute('data-target') || '0')
+    if (sourceId === eventId || targetId === eventId) {
+      allGraphConnections.push({
+        source: sourceId,
+        target: targetId
+      })
+    }
+  })
+  
+  // Получаем связанные события и добавляем информацию о связи
+  props.allEvents.forEach(event => {
+    if (event.id !== eventId) {
+      const connection = connections.find(conn => 
+        (conn.cause_id === eventId && conn.effect_id === event.id) || 
+        (conn.cause_id === event.id && conn.effect_id === eventId)
+      )
+      
+      // Если нашли связь в наших данных, используем ее
+      if (connection) {
+        result.push({
+          ...event,
+          connection: {
+            id: connection.id,
+            type: connection.cause_id === eventId ? 'cause' : 'effect',
+            strength: connection.strength,
+            description: connection.description
+          }
+        })
+      } 
+      // Иначе ищем связь в графе
+      else if (allGraphConnections.some(conn => 
+        (conn.source === eventId && conn.target === event.id) || 
+        (conn.source === event.id && conn.target === eventId)
+      )) {
+        const graphConn = allGraphConnections.find(conn => 
+          (conn.source === eventId && conn.target === event.id) || 
+          (conn.source === event.id && conn.target === eventId)
+        )
+        
+        result.push({
+          ...event,
+          connection: {
+            type: graphConn.source === eventId ? 'cause' : 'effect',
+            strength: 1  // По умолчанию
+          }
+        })
+      }
+      // Или если указано в related_events
+      else if (props.event.related_events && props.event.related_events.includes(event.id)) {
+        result.push(event)
+      }
+    }
+  })
+  
+  return result
+})
+
+// События, для которых текущее событие является причиной
+const causalEvents = computed(() => {
+  if (!props.event || !props.allEvents) return []
+  
+  const result = []
+  const eventId = props.event.id
+  
+  // Получаем все связи, где текущее событие является причиной
+  const connections = []
+  
+  // Ищем связи в массиве соединений
+  if (props.connections && props.connections.length > 0) {
+    props.connections.forEach(conn => {
+      if (conn.source === eventId) {
+        connections.push({
+          cause_id: conn.source,
+          effect_id: conn.target,
+          eventId: conn.target,
+          strength: conn.value || 1,
+          description: conn.description
+        })
+      }
+    })
+  }
+  
+  // Ищем связи в самих событиях (если они есть)
+  props.allEvents.forEach(event => {
+    if (event.connections) {
+      event.connections.forEach(conn => {
+        if (conn.cause_id === eventId && conn.effect_id === event.id) {
+          connections.push({...conn, eventId: event.id})
+        }
+      })
+    }
+  })
+  
+  // Ищем связи в DOM графа, если не нашли достаточно соединений в других источниках
+  if (connections.length === 0) {
+    const graphLinks = document.querySelectorAll('.graph-container .links line')
+    graphLinks.forEach(link => {
+      const sourceId = parseInt(link.getAttribute('data-source') || '0')
+      const targetId = parseInt(link.getAttribute('data-target') || '0')
+      
+      if (sourceId === eventId && targetId !== 0) {
+        const existingConn = connections.find(c => c.eventId === targetId)
+        if (!existingConn) {
+          connections.push({
+            cause_id: sourceId,
+            effect_id: targetId,
+            eventId: targetId,
+            strength: 1
+          })
+        }
+      }
+    })
+  }
+  
+  // Добавляем связанные события в результат
+  connections.forEach(conn => {
+    const relatedEvent = props.allEvents.find(e => e.id === conn.eventId || e.id === conn.effect_id)
+    if (relatedEvent) {
+      result.push({
+        ...relatedEvent,
+        connection: {
+          id: conn.id,
+          type: 'cause',
+          strength: conn.strength,
+          description: conn.description
+        }
+      })
+    }
+  })
+  
+  return result
+})
+
+// События, для которых текущее событие является следствием
+const effectEvents = computed(() => {
+  if (!props.event || !props.allEvents) return []
+  
+  const result = []
+  const eventId = props.event.id
+  
+  // Получаем все связи, где текущее событие является следствием
+  const connections = []
+  
+  // Ищем связи в массиве соединений
+  if (props.connections && props.connections.length > 0) {
+    props.connections.forEach(conn => {
+      if (conn.target === eventId) {
+        connections.push({
+          cause_id: conn.source,
+          effect_id: conn.target,
+          eventId: conn.source,
+          strength: conn.value || 1,
+          description: conn.description
+        })
+      }
+    })
+  }
+  
+  // Ищем связи в самих событиях (если они есть)
+  props.allEvents.forEach(event => {
+    if (event.connections) {
+      event.connections.forEach(conn => {
+        if (conn.cause_id === event.id && conn.effect_id === eventId) {
+          connections.push({...conn, eventId: event.id})
+        }
+      })
+    }
+  })
+  
+  // Ищем связи в DOM графа, если не нашли достаточно соединений в других источниках
+  if (connections.length === 0) {
+    const graphLinks = document.querySelectorAll('.graph-container .links line')
+    graphLinks.forEach(link => {
+      const sourceId = parseInt(link.getAttribute('data-source') || '0')
+      const targetId = parseInt(link.getAttribute('data-target') || '0')
+      
+      if (targetId === eventId && sourceId !== 0) {
+        const existingConn = connections.find(c => c.eventId === sourceId)
+        if (!existingConn) {
+          connections.push({
+            cause_id: sourceId,
+            effect_id: targetId,
+            eventId: sourceId,
+            strength: 1
+          })
+        }
+      }
+    })
+  }
+  
+  // Добавляем связанные события в результат
+  connections.forEach(conn => {
+    const relatedEvent = props.allEvents.find(e => e.id === conn.eventId || e.id === conn.cause_id)
+    if (relatedEvent) {
+      result.push({
+        ...relatedEvent,
+        connection: {
+          id: conn.id,
+          type: 'effect',
+          strength: conn.strength,
+          description: conn.description
+        }
+      })
+    }
+  })
+  
+  return result
 })
 
 function formatDate(dateString) {
   if (!dateString) return '';
+  
+  // Если дата содержит время (ISO 8601), извлекаем только дату
+  if (dateString.includes('T')) {
+    dateString = dateString.split('T')[0];
+  }
+  
   const date = new Date(dateString);
   return date.toLocaleDateString('ru-RU', {
     year: 'numeric', 
@@ -151,6 +436,12 @@ function formatDate(dateString) {
 
 function formatYear(dateString) {
   if (!dateString) return ''
+  
+  // Если дата содержит время (ISO 8601), извлекаем только дату
+  if (dateString.includes('T')) {
+    dateString = dateString.split('T')[0];
+  }
+  
   const date = new Date(dateString)
   return date.getFullYear()
 }
@@ -184,6 +475,20 @@ function getContrastTextColor(hexColor) {
   
   // Возвращаем черный или белый в зависимости от яркости
   return brightness > 128 ? '#000000' : '#FFFFFF'
+}
+
+function getConnectionTypeClass(type) {
+  return type === 'cause' 
+    ? 'bg-blue-100 text-blue-800' 
+    : 'bg-green-100 text-green-800'
+}
+
+function getConnectionLabel(type, relatedEventId) {
+  if (type === 'cause') {
+    return 'Это событие причина'
+  } else {
+    return 'Это событие следствие'
+  }
 }
 
 function close() {

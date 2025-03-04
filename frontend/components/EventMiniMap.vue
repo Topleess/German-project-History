@@ -344,7 +344,7 @@ function initMiniMap() {
   // Инициализация симуляции для прямоугольной формы
   simulation.value = $d3.forceSimulation()
     .force('link', $d3.forceLink().id(d => d.id).distance(60))
-    .force('charge', $d3.forceManyBody().strength(-150))
+    .force('charge', $d3.forceManyBody().strength(-1))
     .force('center', $d3.forceCenter(120, 67.5)) // Центрируем по размерам контейнера
     .force('collision', $d3.forceCollide().radius(20))
     .stop() // Останавливаем симуляцию до обновления данных

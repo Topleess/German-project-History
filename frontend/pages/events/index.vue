@@ -70,18 +70,30 @@
             </Button>
           </div>
         </div>
+        
+        <div class="flex justify-end mt-6">
+          <Button 
+            @click="openCreateEventModal" 
+            class="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Добавить событие
+          </Button>
+        </div>
       </div>
       
-      <!-- Список событий -->
-      <div v-if="loading" class="flex justify-center py-8">
-        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+      <div v-if="loading" class="py-8 text-center">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600"></div>
+        <p class="mt-2 text-gray-600">Загрузка событий...</p>
       </div>
       
-      <div v-else-if="filteredEvents.length === 0" class="text-center py-8 text-gray-500">
-        Нет событий, соответствующих заданным критериям
+      <div v-else-if="filteredEvents.length === 0" class="py-8 text-center">
+        <p class="text-gray-600">Нет событий, соответствующих заданным критериям.</p>
       </div>
       
-      <div v-else>
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <!-- Отображение событий по годам -->
         <div v-for="(yearEvents, year) in eventsByYear" :key="year" class="mb-10">
           <div class="relative mb-6">
@@ -120,13 +132,39 @@
           </div>
         </div>
       </div>
+      
+      <!-- Пагинация -->
+      <div class="mt-6 flex justify-center">
+        <Pagination 
+          :current-page="currentPage" 
+          :total-pages="totalPages" 
+          @change="changePage"
+        />
+      </div>
     </Card>
+    
+    <!-- Модальное окно для создания события -->
+    <Modal
+      :show="showCreateEventModal"
+      title="Создание нового события"
+      confirm-text="Создать"
+      @close="closeCreateEventModal"
+      @confirm="createEvent"
+    >
+      <EventForm
+        ref="eventForm"
+        :categories="categories"
+        :events="events"
+      />
+    </Modal>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useApi } from '~/composables/useApi'
+import Modal from '~/components/Modal.vue'
+import EventForm from '~/components/EventForm.vue'
 
 definePageMeta({
   title: 'Библиотека исторических событий'
@@ -137,12 +175,12 @@ const search = ref('')
 const selectedCategory = ref(null)
 const startDate = ref(null)
 const endDate = ref(null)
-const startDateMenu = ref(false)
-const endDateMenu = ref(false)
 const loading = ref(false)
 const events = ref([])
 const filteredEvents = ref([])
 const categories = ref([])
+const currentPage = ref(1)
+const itemsPerPage = 9 // Количество событий на странице
 
 // Категории событий
 const categoriesData = [
@@ -311,6 +349,82 @@ const clearFilters = () => {
   startDate.value = null
   endDate.value = null
   applyFilter()
+}
+
+// Пагинация
+const totalPages = computed(() => {
+  return Math.ceil(filteredEvents.value.length / itemsPerPage)
+})
+
+const changePage = (page) => {
+  currentPage.value = page
+}
+
+// Состояние для создания нового события
+const showCreateEventModal = ref(false)
+const eventForm = ref(null)
+
+// Открытие модального окна для создания события
+function openCreateEventModal() {
+  showCreateEventModal.value = true
+}
+
+// Закрытие модального окна для создания события
+function closeCreateEventModal() {
+  showCreateEventModal.value = false
+}
+
+// Создание нового события
+async function createEvent() {
+  if (!eventForm.value.validateForm()) {
+    return
+  }
+  
+  try {
+    loading.value = true
+    
+    // Получаем данные из формы
+    const eventData = { ...eventForm.value.formData }
+    
+    // Добавляем новое событие на сервер
+    const { post } = useApi()
+    const newEvent = await post('/api/events', eventData)
+    
+    // Обрабатываем созданные связи
+    const connections = eventForm.value.connections
+    if (connections.length > 0) {
+      const connectionPromises = connections
+        .filter(conn => conn.event_id) // Фильтруем только заполненные связи
+        .map(conn => {
+          const connectionData = {
+            description: conn.description,
+            strength: conn.strength
+          }
+          
+          if (conn.type === 'cause') {
+            connectionData.cause_id = newEvent.id
+            connectionData.effect_id = conn.event_id
+          } else {
+            connectionData.cause_id = conn.event_id
+            connectionData.effect_id = newEvent.id
+          }
+          
+          return post('/api/connections', connectionData)
+        })
+      
+      await Promise.all(connectionPromises)
+    }
+    
+    // Обновляем данные
+    await fetchEvents()
+    
+    // Закрываем модальное окно
+    closeCreateEventModal()
+  } catch (error) {
+    console.error('Ошибка при создании события:', error)
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => {

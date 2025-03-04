@@ -3,6 +3,8 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApi } from '../../composables/useApi'
 import EventMiniMap from '~/components/EventMiniMap.vue'
+import Modal from '~/components/Modal.vue'
+import EventForm from '~/components/EventForm.vue'
 
 definePageMeta({
   title: 'Детальная информация о событии'
@@ -110,69 +112,104 @@ const testConnections = [
   { source: 2, target: 3, value: 1, description: "Влияние на договор" }
 ]
 
-// Форматирование даты
-const formatDate = (dateString) => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return new Intl.DateTimeFormat('ru-RU').format(date)
-}
-
-// Получение названия категории по ID
-const getCategoryName = (categoryId) => {
-  const category = categories.value.find(c => c.id === categoryId)
-  return category ? category.name : ''
-}
-
-// Получение цвета категории по ID
-const getCategoryColor = (categoryId) => {
-  const category = categories.value.find(c => c.id === categoryId)
-  return category ? category.color : 'bg-gray-500'
-}
-
-// Переход к событию при клике на мини-карте
-const navigateToEvent = (eventId) => {
-  router.push(`/events/${eventId}`)
-}
-
-// Загрузка данных о событии
-const fetchEvent = async () => {
+// Загрузка данных
+async function fetchEvent() {
   loading.value = true
   try {
     const { get } = useApi()
+    
+    // Получение данных события по ID
     const eventId = route.params.id
+    const eventData = await get(`/api/events/${eventId}`)
+    event.value = eventData
     
-    // Загружаем данные с API
-    event.value = await get(`/api/events/${eventId}`)
+    // Получение всех событий для связей и мини-карты
+    const eventsData = await get('/api/events')
+    allEvents.value = eventsData
     
-    // Загружаем категории
-    categories.value = await get('/api/categories')
+    // Получение категорий
+    const categoriesData = await get('/api/categories')
+    categories.value = categoriesData
     
-    // Загружаем связанные события
-    const connectionsData = await get('/api/connections')
-    connections.value = connectionsData.filter(
-      c => c.cause_id === parseInt(eventId) || c.effect_id === parseInt(eventId)
-    )
+    // Получение связей для этого события
+    const connectionsData = await get(`/api/connections?event_id=${eventId}`)
+    connections.value = connectionsData
     
-    // Загружаем все события для отображения связанных событий
-    const allEventsData = await get('/api/events')
-    allEvents.value = allEventsData
-    
-    // Формируем список связанных событий
-    const relatedIds = new Set(
-      connections.value.map(c => 
-        c.cause_id === parseInt(eventId) ? c.effect_id : c.cause_id
+    // Находим связанные события
+    if (eventData.related_events && eventData.related_events.length > 0) {
+      relatedEvents.value = eventsData.filter(e => 
+        eventData.related_events.includes(e.id)
       )
-    )
-    
-    relatedEvents.value = allEventsData.filter(e => relatedIds.has(e.id))
+    } else {
+      // Ищем связанные события через соединения
+      const relatedEventIds = new Set()
+      
+      connectionsData.forEach(conn => {
+        if (conn.cause_id === eventData.id) {
+          relatedEventIds.add(conn.effect_id)
+        } else if (conn.effect_id === eventData.id) {
+          relatedEventIds.add(conn.cause_id)
+        }
+      })
+      
+      relatedEvents.value = eventsData.filter(e => 
+        relatedEventIds.has(e.id)
+      )
+    }
   } catch (error) {
     console.error('Ошибка при загрузке события:', error)
+    // При ошибке загрузки используем тестовые данные
+    useTestData()
   } finally {
     loading.value = false
   }
 }
 
-// Установка заголовка страницы с названием события
+// Использование тестовых данных
+function useTestData() {
+  event.value = testEvent
+  relatedEvents.value = testRelatedEvents
+  allEvents.value = testAllEvents 
+  categories.value = categoriesData
+  connections.value = testConnections
+}
+
+// Форматирование даты
+function formatDate(dateString) {
+  if (!dateString) return '';
+  
+  // Если дата содержит время (ISO 8601), извлекаем только дату
+  if (dateString.includes('T')) {
+    dateString = dateString.split('T')[0];
+  }
+  
+  const date = new Date(dateString);
+  return date.toLocaleDateString('ru-RU', {
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric'
+  });
+}
+
+// Получение названия категории по ID
+function getCategoryName(categoryId) {
+  if (!categories.value || categories.value.length === 0) return '';
+  const category = categories.value.find(c => c.id === categoryId);
+  return category ? category.name : '';
+}
+
+// Получение цвета категории по ID
+function getCategoryColor(categoryId) {
+  if (!categories.value || categories.value.length === 0) return 'bg-gray-500';
+  const category = categories.value.find(c => c.id === categoryId);
+  return category ? category.color : 'bg-gray-500';
+}
+
+// Переход к событию
+function navigateToEvent(eventId) {
+  router.push(`/events/${eventId}`);
+}
+
 const setPageTitle = computed(() => {
   return event.value ? event.value.title : 'Загрузка события...'
 })
@@ -183,6 +220,79 @@ watch(event, () => {
     document.title = `${event.value.title} | История`
   }
 })
+
+// Состояние для редактирования события
+const showEditEventModal = ref(false)
+const eventForm = ref(null)
+
+// Открытие модального окна для редактирования события
+function openEditEventModal() {
+  showEditEventModal.value = true
+}
+
+// Закрытие модального окна для редактирования события
+function closeEditEventModal() {
+  showEditEventModal.value = false
+}
+
+// Обновление события
+async function updateEvent() {
+  if (!eventForm.value.validateForm()) {
+    return
+  }
+  
+  try {
+    loading.value = true
+    
+    // Получаем данные из формы
+    const eventData = { ...eventForm.value.formData }
+    
+    // Обновляем событие на сервере
+    const { put, post, delete: deleteMethod } = useApi()
+    await put(`/api/events/${event.value.id}`, eventData)
+    
+    // Обработка соединений
+    const formConnections = eventForm.value.connections
+    if (formConnections.length > 0) {
+      const connectionPromises = formConnections
+        .filter(conn => conn.event_id) // Фильтруем только заполненные связи
+        .map(conn => {
+          const connectionData = {
+            description: conn.description,
+            strength: conn.strength
+          }
+          
+          if (conn.type === 'cause') {
+            connectionData.cause_id = event.value.id
+            connectionData.effect_id = conn.event_id
+          } else {
+            connectionData.cause_id = conn.event_id
+            connectionData.effect_id = event.value.id
+          }
+          
+          // Если соединение уже существует, обновляем его
+          if (conn.id) {
+            return put(`/api/connections/${conn.id}`, connectionData)
+          } else {
+            // Иначе создаем новое
+            return post('/api/connections', connectionData)
+          }
+        })
+      
+      await Promise.all(connectionPromises)
+    }
+    
+    // Обновляем данные
+    await fetchEvent()
+    
+    // Закрываем модальное окно
+    closeEditEventModal()
+  } catch (error) {
+    console.error('Ошибка при обновлении события:', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 onMounted(() => {
   fetchEvent()
@@ -218,7 +328,18 @@ onMounted(() => {
         </button>
       </div>
       
-      <h1 class="text-3xl font-bold mb-6">{{ event.title }}</h1>
+      <div class="flex justify-between items-start mb-6">
+        <h1 class="text-3xl font-bold">{{ event.title }}</h1>
+        <Button 
+          @click="openEditEventModal"
+          class="bg-blue-600 hover:bg-blue-700 text-white"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Редактировать
+        </Button>
+      </div>
       
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <!-- Основная информация -->
@@ -321,6 +442,24 @@ onMounted(() => {
         Вернуться к списку событий
       </Button>
     </div>
+    
+    <!-- Модальное окно для редактирования события -->
+    <Modal
+      :show="showEditEventModal"
+      title="Редактирование события"
+      confirm-text="Сохранить"
+      @close="closeEditEventModal"
+      @confirm="updateEvent"
+    >
+      <EventForm
+        ref="eventForm"
+        :initial-data="event"
+        :categories="categories"
+        :events="allEvents"
+        :is-editing="true"
+        :existing-connections="connections"
+      />
+    </Modal>
   </div>
 </template>
 
