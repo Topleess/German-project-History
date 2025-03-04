@@ -304,10 +304,10 @@ function initGraph() {
   
   // Создаем симуляцию для графа
   simulation.value = $d3.forceSimulation()
-    .force('link', $d3.forceLink().id(d => d.id).distance(100))
-    .force('charge', $d3.forceManyBody().strength(-800))
+    .force('link', $d3.forceLink().id(d => d.id).distance(20))
+    .force('charge', $d3.forceManyBody().strength(-100))
     .force('center', $d3.forceCenter(width / 2, height / 2))
-    .force('collision', $d3.forceCollide().radius(35))
+    .force('collision', $d3.forceCollide().radius(20))
     
   updateGraph()
 }
@@ -336,11 +336,8 @@ function updateGraph() {
     
     // Применяем сохраненные позиции, если они существуют
     if (nodePositions.value[node.id]) {
-      // Не фиксируем позиции сразу, позволяем узлам немного "разбежаться"
       node.x = nodePositions.value[node.id].x
       node.y = nodePositions.value[node.id].y
-      // Убираем фиксированные позиции для начального "разбегания"
-      // Позже они будут зафиксированы
     }
     
     return node
@@ -402,10 +399,10 @@ function updateGraph() {
     .style('font-size', '12px')
     .style('pointer-events', 'none')
   
-  // Обновляем симуляцию с пониженной интенсивностью
+  // Обновляем симуляцию
   simulation.value
     .nodes(graphData.nodes)
-    .force('link', $d3.forceLink(graphData.links).id(d => d.id).distance(100))
+    .force('link', $d3.forceLink(graphData.links).id(d => d.id).distance(60))
     .on('tick', () => {
       link
         .attr('x1', d => d.source.x)
@@ -424,28 +421,15 @@ function updateGraph() {
       })
     })
     
-  // Установка разных значений alpha и alphaDecay для разных ситуаций
+  // Установка alpha для начального разбегания
   if (Object.keys(nodePositions.value).length > 0) {
     simulation.value.alpha(0.3) // Даем графу немного "разбежаться"
   } else {
     simulation.value.alpha(1) // Полная сила для первоначального размещения
   }
 
-  // Даем узлам немного времени на "разбегание", затем фиксируем их позиции
-  setTimeout(() => {
-    graphData.nodes.forEach(node => {
-      // Фиксируем позиции узлов после начального разбегания
-      if (node.x && node.y) {
-        node.fx = node.x;
-        node.fy = node.y;
-      }
-    });
-    
-    // Замедляем снижение интенсивности симуляции, чтобы дать время на разбегание
-    simulation.value.alphaDecay(0.02);
-    simulation.value.alpha(0.1).restart();
-  }, 2000);
-    
+  // Настройка значения alphaDecay для более плавного движения
+  simulation.value.alphaDecay(0.015); // Уменьшено с 0.02, чтобы симуляция дольше продолжалась
   simulation.value.restart()
   
   // Добавляем обработчик клика по фону для сброса выбора
@@ -491,10 +475,9 @@ function drag(simulation, d3) {
   function dragended(event) {
     if (!event.active) simulation.alphaTarget(0)
     
-    // Оставляем узел на фиксированной позиции после перетаскивания
-    // Это позволяет фиксировать узлы на месте после перемещения
-    // event.subject.fx = null
-    // event.subject.fy = null
+    // Убираем фиксацию, чтобы узел мог двигаться после перетаскивания
+    event.subject.fx = null
+    event.subject.fy = null
     
     // Сохраняем конечную позицию
     nodePositions.value[event.subject.id] = { 
