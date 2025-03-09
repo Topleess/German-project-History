@@ -174,12 +174,16 @@
         </div>
       </div>
     </Modal>
+
+    <!-- Добавляем компонент Toast для отображения уведомлений -->
+    <Toast />
   </div>
 </template>
 
 <script setup>
 import { ref } from 'vue';
 import Modal from '~/components/Modal.vue';
+import Toast from '~/components/Toast.vue';
 
 // Состояния для модальных окон
 const showLoginModal = ref(false);
