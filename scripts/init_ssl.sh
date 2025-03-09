@@ -9,6 +9,22 @@ fi
 DOMAIN=$1
 EMAIL=$2
 
+# Преобразуем домен в Punycode, если он содержит кириллические символы
+if command -v idn2 &> /dev/null; then
+  echo "Проверяем, нужно ли преобразовывать домен в Punycode..."
+  PUNYCODE_DOMAIN=$(echo "$DOMAIN" | idn2) || PUNYCODE_DOMAIN="$DOMAIN"
+  
+  # Если домен был преобразован, выводим информацию
+  if [ "$PUNYCODE_DOMAIN" != "$DOMAIN" ]; then
+    echo "Домен преобразован в Punycode: $PUNYCODE_DOMAIN"
+    DOMAIN="$PUNYCODE_DOMAIN"
+  else
+    echo "Домен не требует преобразования в Punycode"
+  fi
+else
+  echo "Утилита idn2 не установлена, используем домен как есть"
+fi
+
 # Если email не указан, используем non-interactive режим с --register-unsafely-without-email
 if [ -z "$EMAIL" ]; then
   EMAIL_ARG="--register-unsafely-without-email"

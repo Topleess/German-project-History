@@ -62,10 +62,12 @@ jobs:
       
       - name: Deploy to server
         run: |
-          # Преобразуем домен в Punycode, если это необходимо
-          PUNYCODE_DOMAIN=$(echo '${{ secrets.DOMAIN_NAME }}' | idn2)
-          if [ $? -ne 0 ]; then
-            # Если idn2 не установлен, пробуем использовать исходный домен
+          # Проверяем наличие команды idn2
+          if command -v idn2 &> /dev/null; then
+            echo "idn2 найден, преобразуем домен в Punycode..."
+            PUNYCODE_DOMAIN=$(echo '${{ secrets.DOMAIN_NAME }}' | idn2) || PUNYCODE_DOMAIN='${{ secrets.DOMAIN_NAME }}'
+          else
+            echo "idn2 не установлен, используем исходный домен..."
             PUNYCODE_DOMAIN='${{ secrets.DOMAIN_NAME }}'
           fi
           
@@ -89,11 +91,11 @@ jobs:
             # Если конфигурация Nginx изменилась, проверяем и перезапускаем
             if [ -f ./nginx/site.conf ]; then
               # Заменяем DOMAIN_NAME в конфиге на его Punycode версию при необходимости
-              DOMAIN_PUNYCODE=\"$PUNYCODE_DOMAIN\"
+              DOMAIN_PUNYCODE=\"\$PUNYCODE_DOMAIN\"
               # Создаем временный файл с корректным доменом, если он на кириллице
-              cat ./nginx/site.conf | envsubst '$DOMAIN_PUNYCODE' > ./nginx/temp_site.conf
-              sudo cp ./nginx/temp_site.conf /etc/nginx/sites-available/$PUNYCODE_DOMAIN &&
-              sudo ln -sf /etc/nginx/sites-available/$PUNYCODE_DOMAIN /etc/nginx/sites-enabled/ &&
+              cat ./nginx/site.conf | envsubst '\$DOMAIN_PUNYCODE' > ./nginx/temp_site.conf
+              sudo cp ./nginx/temp_site.conf /etc/nginx/sites-available/\$PUNYCODE_DOMAIN &&
+              sudo ln -sf /etc/nginx/sites-available/\$PUNYCODE_DOMAIN /etc/nginx/sites-enabled/ &&
               sudo nginx -t && sudo systemctl reload nginx &&
               rm ./nginx/temp_site.conf
             fi
