@@ -1,7 +1,7 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   // Включаем DevTools для разработки
-  devtools: { enabled: true },
+  devtools: { enabled: process.env.NODE_ENV === 'development' },
 
   // Модули
   modules: [
@@ -31,10 +31,26 @@ export default defineNuxtConfig({
     transpile: ['d3']
   },
 
-  // Настройки для разработки
+  // Настройки для разработки и продакшена
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000'
+      // В продакшене API будет доступен по относительному пути /api
+      apiBase: process.env.NODE_ENV === 'production' 
+        ? '/api' 
+        : (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000')
+    }
+  },
+
+  // Конфигурация для SSR
+  ssr: true,
+
+  // Настройка прокси для разработки
+  nitro: {
+    devProxy: {
+      '/api': {
+        target: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000',
+        pathRewrite: { '^/api': '' }
+      }
     }
   },
 

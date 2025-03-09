@@ -1,0 +1,100 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Build and test backend
+        run: |
+          cd backend
+          docker build -t history-backend:latest .
+      
+      - name: Build and test frontend
+        run: |
+          cd frontend
+          docker build -t history-frontend:latest .
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install required tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libidn2-0 libidn2-dev
+          
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          
+          # Безопасно добавляем ключ хоста
+          FINGERPRINT=$(ssh-keyscan -H ${{ secrets.SSH_HOST }} 2>/dev/null | ssh-keygen -lf - | awk '{print $2}')
+          
+          # Проверяем, есть ли ключ и соответствует ли он ожидаемому отпечатку
+          # Если в будущем вы получите отпечаток хоста, добавьте его проверку здесь
+          # if [ "$FINGERPRINT" != "ожидаемый_отпечаток" ]; then
+          #   echo "WARNING: Host key verification failed! Possible MITM attack!"
+          #   exit 1
+          # fi
+          
+          # Добавляем ключ хоста, если прошла проверка
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+      
+      - name: Deploy to server
+        run: |
+          # Преобразуем домен в Punycode, если это необходимо
+          PUNYCODE_DOMAIN=$(echo '${{ secrets.DOMAIN_NAME }}' | idn2)
+          if [ $? -ne 0 ]; then
+            # Если idn2 не установлен, пробуем использовать исходный домен
+            PUNYCODE_DOMAIN='${{ secrets.DOMAIN_NAME }}'
+          fi
+          
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ${{ secrets.DEPLOY_PATH }} &&
+            git pull &&
+            
+            # Резервное копирование данных перед обновлением (если база уже PostgreSQL)
+            if [ -f ./scripts/backup_db.sh ]; then
+              bash ./scripts/backup_db.sh
+            fi
+            
+            docker-compose down &&
+            docker-compose up -d --build &&
+            
+            # Запуск миграций после обновления (для PostgreSQL)
+            if [ -f ./scripts/run_migrations.sh ]; then
+              bash ./scripts/run_migrations.sh
+            fi
+            
+            # Если конфигурация Nginx изменилась, проверяем и перезапускаем
+            if [ -f ./nginx/site.conf ]; then
+              # Заменяем DOMAIN_NAME в конфиге на его Punycode версию при необходимости
+              DOMAIN_PUNYCODE=\"$PUNYCODE_DOMAIN\"
+              # Создаем временный файл с корректным доменом, если он на кириллице
+              cat ./nginx/site.conf | envsubst '$DOMAIN_PUNYCODE' > ./nginx/temp_site.conf
+              sudo cp ./nginx/temp_site.conf /etc/nginx/sites-available/$PUNYCODE_DOMAIN &&
+              sudo ln -sf /etc/nginx/sites-available/$PUNYCODE_DOMAIN /etc/nginx/sites-enabled/ &&
+              sudo nginx -t && sudo systemctl reload nginx &&
+              rm ./nginx/temp_site.conf
+            fi
+          " 

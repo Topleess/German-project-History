@@ -4,10 +4,54 @@ services:
   backend:
     build: ./backend
     container_name: history-backend
-    ports:
-      - "8000:8000"
+    networks:
+      - app-network
+    expose:
+      - "8000"
     volumes:
       - ./backend:/app
     environment:
       - DATABASE_URL=sqlite:///./history.db
-    restart: unless-stopped 
+    restart: unless-stopped
+    
+  frontend:
+    build: ./frontend
+    container_name: history-frontend
+    networks:
+      - app-network
+    expose:
+      - "3000"
+    volumes:
+      - ./frontend:/app
+    restart: unless-stopped
+    
+  nginx:
+    image: nginx:alpine
+    container_name: history-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/site.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - app-network
+    restart: unless-stopped
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    
+  certbot:
+    image: certbot/certbot
+    container_name: history-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    restart: unless-stopped
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  app-network:
+    driver: bridge 
