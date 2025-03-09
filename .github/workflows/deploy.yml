@@ -80,8 +80,30 @@ jobs:
               bash ./scripts/backup_db.sh
             fi
             
-            docker compose down &&
-            docker compose up -d --build &&
+            # Останавливаем и запускаем контейнеры с новой версией
+            echo 'Перезапускаем контейнеры...'
+            
+            # Более безопасная остановка контейнеров
+            \$DOCKER_COMPOSE_CMD stop || echo 'Ошибка при остановке контейнеров, пробуем остановить каждый по отдельности...'
+            
+            # Если общая остановка не удалась, пробуем остановить каждый контейнер по отдельности
+            for container in backend frontend nginx certbot; do
+              echo "Останавливаем контейнер history-$container..."
+              docker stop history-$container 2>/dev/null || echo "Контейнер history-$container уже остановлен или не существует"
+            done
+            
+            # Удаляем контейнеры
+            \$DOCKER_COMPOSE_CMD rm -f || echo 'Ошибка при удалении контейнеров, пробуем удалить каждый по отдельности...'
+            
+            # Если общее удаление не удалось, пробуем удалить каждый контейнер по отдельности
+            for container in backend frontend nginx certbot; do
+              echo "Удаляем контейнер history-$container..."
+              docker rm -f history-$container 2>/dev/null || echo "Не удалось удалить контейнер history-$container или он не существует"
+            done
+            
+            # Запускаем контейнеры заново
+            echo 'Запускаем контейнеры заново...'
+            \$DOCKER_COMPOSE_CMD up -d --build
             
             # Запуск миграций после обновления (для PostgreSQL)
             if [ -f ./scripts/run_migrations.sh ]; then
