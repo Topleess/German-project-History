@@ -2,9 +2,35 @@
 
 echo "Запуск миграций базы данных..."
 
+# Определяем, какую команду использовать для Docker Compose
+DOCKER_COMPOSE_CMD="docker-compose"
+if ! command -v docker-compose &> /dev/null; then
+  echo "docker-compose не найден, проверяем наличие 'docker compose'..."
+  if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    echo "Используем 'docker compose' вместо 'docker-compose'"
+    DOCKER_COMPOSE_CMD="docker compose"
+  else
+    echo "ОШИБКА: Docker Compose не найден! Установите Docker Compose для продолжения."
+    echo "Например: sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
+    exit 1
+  fi
+fi
+
+# Проверяем, запущен ли контейнер backend
+if ! $DOCKER_COMPOSE_CMD ps | grep -q "backend.*running"; then
+  echo "Контейнер backend не запущен! Пытаемся запустить..."
+  $DOCKER_COMPOSE_CMD up -d backend || {
+    echo "Не удалось запустить контейнер backend. Миграции не могут быть выполнены."
+    exit 1
+  }
+  # Даем контейнеру время на запуск
+  echo "Ожидаем запуск контейнера backend..."
+  sleep 5
+fi
+
 # Выполняем миграции внутри контейнера backend
-# Если у вас есть специальная команда для миграций, замените её здесь
-docker-compose exec -T backend python -c "
+echo "Запускаем скрипт миграций в контейнере..."
+$DOCKER_COMPOSE_CMD exec -T backend python -c "
 import os
 import sys
 import importlib.util

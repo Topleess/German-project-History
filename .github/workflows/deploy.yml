@@ -80,8 +80,8 @@ jobs:
               bash ./scripts/backup_db.sh
             fi
             
-            docker-compose down &&
-            docker-compose up -d --build &&
+            docker compose down &&
+            docker compose up -d --build &&
             
             # Запуск миграций после обновления (для PostgreSQL)
             if [ -f ./scripts/run_migrations.sh ]; then
