@@ -80,44 +80,51 @@ jobs:
               bash ./scripts/backup_db.sh
             fi
             
+            # Определяем Docker Compose команду
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD='docker-compose'
+            elif command -v docker &> /dev/null && docker compose version &> /dev/null; then
+              DOCKER_COMPOSE_CMD='docker compose'
+            else
+              echo 'ОШИБКА: Docker Compose не установлен!'
+              exit 1
+            fi
+            
+            # Проверяем наличие docker-compose.yml
+            if [ ! -f docker-compose.yml ]; then
+              echo 'ОШИБКА: Файл docker-compose.yml не найден!'
+              exit 1
+            fi
+            
             # Останавливаем и запускаем контейнеры с новой версией
             echo 'Перезапускаем контейнеры...'
             
-            # Более безопасная остановка контейнеров
-            \$DOCKER_COMPOSE_CMD stop || echo 'Ошибка при остановке контейнеров, пробуем остановить каждый по отдельности...'
+            # Останавливаем контейнеры
+            \${DOCKER_COMPOSE_CMD} down || echo 'Ошибка при остановке контейнеров, пробуем остановить каждый по отдельности...'
             
             # Если общая остановка не удалась, пробуем остановить каждый контейнер по отдельности
-            for container in backend frontend nginx certbot; do
-              echo "Останавливаем контейнер history-$container..."
-              docker stop history-$container 2>/dev/null || echo "Контейнер history-$container уже остановлен или не существует"
+            for c in backend frontend nginx certbot; do
+              echo \"Останавливаем контейнер history-\${c}...\"
+              docker stop \"history-\${c}\" 2>/dev/null || echo \"Контейнер history-\${c} уже остановлен или не существует\"
             done
             
             # Удаляем контейнеры
-            \$DOCKER_COMPOSE_CMD rm -f || echo 'Ошибка при удалении контейнеров, пробуем удалить каждый по отдельности...'
-            
-            # Если общее удаление не удалось, пробуем удалить каждый контейнер по отдельности
-            for container in backend frontend nginx certbot; do
-              echo "Удаляем контейнер history-$container..."
-              docker rm -f history-$container 2>/dev/null || echo "Не удалось удалить контейнер history-$container или он не существует"
+            for c in backend frontend nginx certbot; do
+              echo \"Удаляем контейнер history-\${c}...\"
+              docker rm -f \"history-\${c}\" 2>/dev/null || echo \"Не удалось удалить контейнер history-\${c} или он не существует\"
             done
             
             # Запускаем контейнеры заново
             echo 'Запускаем контейнеры заново...'
-            \$DOCKER_COMPOSE_CMD up -d --build
+            \${DOCKER_COMPOSE_CMD} up -d --build
             
-            # Запуск миграций после обновления (для PostgreSQL)
+            # Запуск миграций после обновления
             if [ -f ./scripts/run_migrations.sh ]; then
-              DOCKER_COMPOSE_CMD="docker-compose"
-              if ! command -v docker-compose &> /dev/null; then
-                if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-                  DOCKER_COMPOSE_CMD="docker compose"
-                fi
-              fi
               export DOCKER_COMPOSE_CMD
               bash ./scripts/run_migrations.sh
             fi
             
-            # Если конфигурация Nginx изменилась, проверяем и перезапускаем без sudo
+            # Если конфигурация Nginx изменилась, применяем её
             if [ -f ./nginx/site.conf ]; then
               # Заменяем DOMAIN_NAME в конфиге на его Punycode версию при необходимости
               DOMAIN_PUNYCODE=\"\$PUNYCODE_DOMAIN\"
@@ -125,7 +132,7 @@ jobs:
               cat ./nginx/site.conf | envsubst '\$DOMAIN_PUNYCODE' > ./nginx/temp_site.conf
               # Используем контейнер nginx для обновления конфигурации
               cp ./nginx/temp_site.conf ./nginx/default.conf
-              $DOCKER_COMPOSE_CMD restart nginx
+              \${DOCKER_COMPOSE_CMD} restart nginx || echo 'Не удалось перезапустить nginx'
               rm ./nginx/temp_site.conf
             fi
           " 
