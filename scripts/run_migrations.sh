@@ -3,23 +3,26 @@
 echo "Запуск миграций базы данных..."
 
 # Определяем, какую команду использовать для Docker Compose
-DOCKER_COMPOSE_CMD="docker-compose"
-if ! command -v docker-compose &> /dev/null; then
-  echo "docker-compose не найден, проверяем наличие 'docker compose'..."
-  if command -v docker &> /dev/null && docker compose version &> /dev/null; then
-    echo "Используем 'docker compose' вместо 'docker-compose'"
-    DOCKER_COMPOSE_CMD="docker compose"
-  else
-    echo "ОШИБКА: Docker Compose не найден! Установите Docker Compose для продолжения."
-    echo "Например: sudo apt-get update && sudo apt-get install -y docker-compose-plugin"
-    exit 1
+# Если DOCKER_COMPOSE_CMD уже установлена в окружении, используем её
+if [ -z "${DOCKER_COMPOSE_CMD}" ]; then
+  DOCKER_COMPOSE_CMD="docker-compose"
+  if ! command -v docker-compose &> /dev/null; then
+    echo "docker-compose не найден, проверяем наличие 'docker compose'..."
+    if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+      echo "Используем 'docker compose' вместо 'docker-compose'"
+      DOCKER_COMPOSE_CMD="docker compose"
+    else
+      echo "ОШИБКА: Docker Compose не найден! Установите Docker Compose для продолжения."
+      echo "Например: apt-get update && apt-get install -y docker-compose-plugin"
+      exit 1
+    fi
   fi
 fi
 
 # Проверяем, запущен ли контейнер backend
-if ! $DOCKER_COMPOSE_CMD ps | grep -q "backend.*running"; then
+if ! ${DOCKER_COMPOSE_CMD} ps | grep -q "backend.*running"; then
   echo "Контейнер backend не запущен! Пытаемся запустить..."
-  $DOCKER_COMPOSE_CMD up -d backend || {
+  ${DOCKER_COMPOSE_CMD} up -d backend || {
     echo "Не удалось запустить контейнер backend. Миграции не могут быть выполнены."
     exit 1
   }
@@ -28,9 +31,9 @@ if ! $DOCKER_COMPOSE_CMD ps | grep -q "backend.*running"; then
   sleep 5
 fi
 
-# Выполняем миграции внутри контейнера backend
+# Выполняем миграции внутри контейнера backend, без запроса пароля
 echo "Запускаем скрипт миграций в контейнере..."
-$DOCKER_COMPOSE_CMD exec -T backend python -c "
+${DOCKER_COMPOSE_CMD} exec -T backend python -c "
 import os
 import sys
 import importlib.util

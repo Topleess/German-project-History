@@ -107,18 +107,25 @@ jobs:
             
             # Запуск миграций после обновления (для PostgreSQL)
             if [ -f ./scripts/run_migrations.sh ]; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+              if ! command -v docker-compose &> /dev/null; then
+                if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+                  DOCKER_COMPOSE_CMD="docker compose"
+                fi
+              fi
+              export DOCKER_COMPOSE_CMD
               bash ./scripts/run_migrations.sh
             fi
             
-            # Если конфигурация Nginx изменилась, проверяем и перезапускаем
+            # Если конфигурация Nginx изменилась, проверяем и перезапускаем без sudo
             if [ -f ./nginx/site.conf ]; then
               # Заменяем DOMAIN_NAME в конфиге на его Punycode версию при необходимости
               DOMAIN_PUNYCODE=\"\$PUNYCODE_DOMAIN\"
               # Создаем временный файл с корректным доменом, если он на кириллице
               cat ./nginx/site.conf | envsubst '\$DOMAIN_PUNYCODE' > ./nginx/temp_site.conf
-              sudo cp ./nginx/temp_site.conf /etc/nginx/sites-available/\$PUNYCODE_DOMAIN &&
-              sudo ln -sf /etc/nginx/sites-available/\$PUNYCODE_DOMAIN /etc/nginx/sites-enabled/ &&
-              sudo nginx -t && sudo systemctl reload nginx &&
+              # Используем контейнер nginx для обновления конфигурации
+              cp ./nginx/temp_site.conf ./nginx/default.conf
+              $DOCKER_COMPOSE_CMD restart nginx
               rm ./nginx/temp_site.conf
             fi
           " 
